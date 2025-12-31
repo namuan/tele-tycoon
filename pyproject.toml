@@ -1,0 +1,21 @@
+[project]
+name = "tele-tycoon"
+version = "0.1.0"
+description = "From novice to mogul: explanations that elevate your empire"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-telegram-bot",
+    "python-dotenv",
+    "sqlalchemy",
+    "alembic",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "radon",
+    "skylos",
+    "xenon",
+]

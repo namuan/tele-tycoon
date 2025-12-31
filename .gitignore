@@ -1,0 +1,23 @@
+# ignore all root items
+/*
+__pycache__/
+
+# unignore folders
+!teletycoon/
+!docs/
+!scripts/
+
+# unignore files
+!.gitignore
+!Makefile
+!LICENSE
+!README.md
+!manage.py
+!requirements.txt
+!.env.example
+!main.py
+!pyproject.toml
+!PLAN.md
+!.python-version
+!.pre-commit-config.yaml
+!uv.lock
