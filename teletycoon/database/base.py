@@ -1,5 +1,6 @@
 """Database base configuration for TeleTycoon."""
 
+import os
 from pathlib import Path
 from typing import Generator
 
@@ -10,6 +11,18 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "teletycoon.db"
 
 
+def get_db_path() -> Path:
+    """Get database path from environment or use default.
+
+    Returns:
+        Path to database file.
+    """
+    db_path_str = os.getenv("DATABASE_PATH")
+    if db_path_str:
+        return Path(db_path_str)
+    return DEFAULT_DB_PATH
+
+
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
 
@@ -18,13 +31,13 @@ def get_engine(db_path: Path | str | None = None):
     """Create a database engine.
 
     Args:
-        db_path: Path to the SQLite database file.
+        db_path: Path to the SQLite database file. If None, uses DATABASE_PATH from env or default.
 
     Returns:
         SQLAlchemy engine.
     """
     if db_path is None:
-        db_path = DEFAULT_DB_PATH
+        db_path = get_db_path()
 
     # Ensure directory exists
     db_path = Path(db_path)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from teletycoon.database import GameRepository, get_session
 from teletycoon.models.company import CompanyStatus
 
 if TYPE_CHECKING:
@@ -21,15 +22,25 @@ class GameEngine:
         state: The current game state.
     """
 
-    def __init__(self, game_id: str) -> None:
+    def __init__(self, game_id: str, enable_persistence: bool = True) -> None:
         """Initialize a new game engine.
 
         Args:
             game_id: Unique identifier for this game.
+            enable_persistence: Whether to enable database persistence (default True).
         """
         self.logger = logging.getLogger(__name__)
         self.state = GameState(id=game_id)
-        self.logger.info(f"GameEngine initialized for game {game_id}")
+        self.enable_persistence = enable_persistence
+        self.repository = None
+
+        if enable_persistence:
+            session = next(get_session())
+            self.repository = GameRepository(session)
+
+        self.logger.info(
+            f"GameEngine initialized for game {game_id} (persistence: {enable_persistence})"
+        )
 
     def add_player(
         self,
@@ -59,6 +70,15 @@ class GameEngine:
         self.logger.info(f"Added player {name} (ID: {player_id}, Type: {player_type})")
         return player
 
+    def save(self) -> None:
+        """Save the current game state to database."""
+        if self.enable_persistence and self.repository:
+            try:
+                self.repository.save_game_state(self.state)
+                self.logger.debug(f"Game state saved for game {self.state.id}")
+            except Exception as e:
+                self.logger.error(f"Failed to save game state: {e}")
+
     def start_game(self) -> None:
         """Start the game after all players have joined."""
         if len(self.state.players) < 2:
@@ -67,6 +87,7 @@ class GameEngine:
             raise ValueError("Maximum 6 players allowed")
 
         self.state.initialize_game()
+        self.save()
 
     def get_available_actions(self) -> list[dict[str, Any]]:
         """Get list of available actions for the current player.
@@ -237,6 +258,8 @@ class GameEngine:
             self.logger.info(
                 f"Action '{action_type}' completed successfully: {result.get('message', 'No message')}"
             )
+            # Save state after successful action
+            self.save()
         else:
             self.logger.warning(
                 f"Action '{action_type}' failed: {result.get('error', 'Unknown error')}"
