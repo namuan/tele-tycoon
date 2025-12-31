@@ -56,8 +56,16 @@ class TeleTycoonBot:
         # Initialize database
         init_db()
 
-        # Create application
-        self.app = Application.builder().token(self.token).build()
+        # Create application with increased timeouts for LLM processing
+        self.app = (
+            Application.builder()
+            .token(self.token)
+            .read_timeout(60)  # Increased from default 5 seconds
+            .write_timeout(60)  # Increased from default 5 seconds
+            .connect_timeout(60)  # Increased from default 5 seconds
+            .pool_timeout(60)  # Increased from default 1 second
+            .build()
+        )
 
         # Register command handlers
         self.app.add_handler(CommandHandler("start", self.command_handlers.start))

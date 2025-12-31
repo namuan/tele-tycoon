@@ -389,9 +389,20 @@ Have fun building your railroad empire! 🚂💰"""
     ) -> None:
         """Handle /endgame command."""
         chat_id = update.effective_chat.id
+        game_id = str(chat_id)
 
-        if str(chat_id) in self.bot.games:
-            del self.bot.games[str(chat_id)]
+        # Delete from memory cache
+        if game_id in self.bot.games:
+            del self.bot.games[game_id]
+
+        # Delete from database
+        from teletycoon.database import GameRepository, get_session
+
+        session = next(get_session())
+        repo = GameRepository(session)
+        deleted = repo.delete_game(game_id)
+
+        if deleted:
             await update.message.reply_text("🏁 Game ended.")
         else:
             await update.message.reply_text("No game to end.")
@@ -488,7 +499,7 @@ Have fun building your railroad empire! 🚂💰"""
         """Process an AI player's turn."""
         logger.info(f"Processing AI turn for {ai_player.name}")
 
-        # Choose appropriate AI implementation
+        # Choose appropriate AI implementation - create once per turn
         if ai_player.player_type == PlayerType.LLM:
             from teletycoon.ai.llm_player import LLMPlayer
             import httpx
@@ -522,29 +533,35 @@ Have fun building your railroad empire! 🚂💰"""
             ai = RuleBasedAI(ai_player.id, engine.state)
             emoji = "🤖"
 
-        actions = engine.get_available_actions()
-
-        if not actions:
-            return
-
-        chosen = ai.choose_action(actions)
-        reasoning = ai.get_reasoning()
-
-        # Execute the action
-        chosen_copy = dict(chosen)
-        action_type = chosen_copy.pop("type", "unknown")
-        result = engine.execute_action(action_type, **chosen_copy)
-
-        # Report AI action
+        # Process all actions for this AI player's turn
         renderer = StateRenderer(engine.state)
-        msg = f"{emoji} {ai_player.name}: {renderer.render_action_result(result)}\n💭 {reasoning}"
+        while engine.state.current_player == ai_player:
+            actions = engine.get_available_actions()
 
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=msg,
-        )
+            if not actions:
+                break
 
-        # Continue if next player is also AI
+            chosen = ai.choose_action(actions)
+            reasoning = ai.get_reasoning()
+
+            # Execute the action
+            chosen_copy = dict(chosen)
+            action_type = chosen_copy.pop("type", "unknown")
+            result = engine.execute_action(action_type, **chosen_copy)
+
+            # Report AI action
+            msg = f"{emoji} {ai_player.name}: {renderer.render_action_result(result)}\n💭 {reasoning}"
+
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=msg,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send AI action message: {e}")
+                # Continue processing even if message send fails
+
+        # After AI completes their turn, prompt the next player
         await self._prompt_current_player(update, context, engine)
 
 
