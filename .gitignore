@@ -6,6 +6,7 @@ __pycache__/
 !teletycoon/
 !docs/
 !scripts/
+!tests/
 
 # unignore files
 !.gitignore

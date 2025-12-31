@@ -191,9 +191,18 @@ class GameState:
             f"Ending SR{self.stock_round_number}, starting operating rounds"
         )
 
+        # If no companies are active, skip operating rounds and start new stock round
+        if not self.active_companies:
+            self.logger.info("No active companies, skipping to next stock round")
+            self.start_stock_round()
+            return
+
         self.round_type = RoundType.OPERATING
         self.current_phase = GamePhase.OPERATING_ROUND
         self.operating_round_number = 1
+        self.operating_rounds_remaining = OR_PER_SR[
+            min(self.phase_number, max(OR_PER_SR.keys()))
+        ]
         self.passed_players.clear()
 
         # Reset operated flags
