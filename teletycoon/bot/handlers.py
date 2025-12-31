@@ -418,7 +418,9 @@ Have fun building your railroad empire! 🚂💰"""
         reasoning = ai.get_reasoning()
 
         # Execute the action
-        result = engine.execute_action(**chosen)
+        chosen_copy = dict(chosen)
+        action_type = chosen_copy.pop("type", "unknown")
+        result = engine.execute_action(action_type, **chosen_copy)
 
         # Report AI action
         renderer = StateRenderer(engine.state)
@@ -516,7 +518,9 @@ class GameHandlers:
         action: dict[str, Any],
     ) -> None:
         """Execute a game action."""
-        result = engine.execute_action(**action)
+        action_copy = dict(action)
+        action_type = action_copy.pop("type", "unknown")
+        result = engine.execute_action(action_type, **action_copy)
 
         renderer = StateRenderer(engine.state)
         response = renderer.render_action_result(result)
