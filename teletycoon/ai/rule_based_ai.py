@@ -1,5 +1,6 @@
 """Rule-based AI for TeleTycoon."""
 
+import logging
 import random
 from typing import TYPE_CHECKING, Any
 
@@ -37,8 +38,12 @@ class RuleBasedAI(BaseAI):
             aggressiveness: Aggression level (0=conservative, 1=aggressive).
         """
         super().__init__(player_id, state)
+        self.logger = logging.getLogger(__name__)
         self.last_reasoning = ""
         self.aggressiveness = max(0.0, min(1.0, aggressiveness))
+        self.logger.info(
+            f"RuleBasedAI initialized for player {player_id} with aggressiveness={aggressiveness}"
+        )
 
     def choose_action(self, available_actions: list[dict[str, Any]]) -> dict[str, Any]:
         """Choose an action using rule-based heuristics.
@@ -49,8 +54,13 @@ class RuleBasedAI(BaseAI):
         Returns:
             The chosen action dictionary.
         """
+        self.logger.debug(
+            f"AI choosing action from {len(available_actions)} available actions"
+        )
+
         if not available_actions:
             self.last_reasoning = "No actions available"
+            self.logger.info("No actions available, passing by default")
             return {"type": "pass"}
 
         # Route to appropriate strategy

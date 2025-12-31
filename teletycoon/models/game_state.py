@@ -1,5 +1,6 @@
 """Game state model for TeleTycoon 1889."""
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -92,6 +93,10 @@ class GameState:
     passed_players: set[str] = field(default_factory=set)
     game_log: list[dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        """Post-initialization setup."""
+        self.logger = logging.getLogger(__name__)
+
     @property
     def current_player(self) -> Player | None:
         """Get the current player."""
@@ -133,11 +138,17 @@ class GameState:
         """Add a player to the game."""
         self.players[player.id] = player
         self.player_order.append(player.id)
+        self.logger.info(f"Player {player.name} ({player.id}) added to game {self.id}")
 
     def initialize_game(self) -> None:
         """Initialize a new game of 1889."""
+        self.logger.info(
+            f"Initializing game {self.id} with {len(self.players)} players"
+        )
+
         # Set up companies
         self.companies = create_1889_companies()
+        self.logger.debug(f"Created {len(self.companies)} companies")
 
         # Add companies to stock market
         for company_id in self.companies:
@@ -159,6 +170,9 @@ class GameState:
         self.operating_rounds_remaining = OR_PER_SR[self.phase_number]
 
         self.log_event("game_start", {"player_count": player_count})
+        self.logger.info(
+            f"Game {self.id} initialized - SR1 starting with {player_count} players, ¥{starting_money} each"
+        )
 
     def advance_to_next_player(self) -> None:
         """Move to the next player in turn order."""
@@ -173,6 +187,10 @@ class GameState:
 
     def end_stock_round(self) -> None:
         """End the current stock round and start operating rounds."""
+        self.logger.info(
+            f"Ending SR{self.stock_round_number}, starting operating rounds"
+        )
+
         self.round_type = RoundType.OPERATING
         self.current_phase = GamePhase.OPERATING_ROUND
         self.operating_round_number = 1
@@ -186,6 +204,10 @@ class GameState:
 
     def end_operating_round(self) -> None:
         """End the current operating round."""
+        self.logger.info(
+            f"Ending OR{self.operating_round_number}, {self.operating_rounds_remaining - 1} ORs remaining"
+        )
+
         self.operating_rounds_remaining -= 1
 
         # Reset operated flags

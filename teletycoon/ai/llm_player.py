@@ -1,6 +1,7 @@
 """LLM-based AI player for TeleTycoon."""
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -42,6 +43,10 @@ class LLMPlayer(BaseAI):
         self.last_reasoning = ""
         self.personality = personality
         self.llm_client = llm_client
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(
+            f"LLMPlayer initialized for player {player_id} with personality={personality}"
+        )
 
     def choose_action(self, available_actions: list[dict[str, Any]]) -> dict[str, Any]:
         """Choose an action using LLM reasoning.
@@ -52,8 +57,13 @@ class LLMPlayer(BaseAI):
         Returns:
             The chosen action dictionary.
         """
+        self.logger.debug(
+            f"LLM choosing action from {len(available_actions)} available actions"
+        )
+
         if not available_actions:
             self.last_reasoning = "No actions available"
+            self.logger.info("No actions available for LLM, passing by default")
             return {"type": "pass"}
 
         # Build prompt for LLM
@@ -62,14 +72,24 @@ class LLMPlayer(BaseAI):
         # If no LLM client, fall back to first action
         if not self.llm_client:
             self.last_reasoning = "LLM not configured, using default action"
+            self.logger.warning(
+                "LLM client not configured, using first available action"
+            )
             return available_actions[0]
 
         try:
+            self.logger.debug("Calling LLM for action decision")
             response = self._call_llm(prompt)
             action, reasoning = self._parse_response(response, available_actions)
             self.last_reasoning = reasoning
+            self.logger.info(
+                f"LLM chose action: {action.get('type', 'unknown')} - {reasoning[:100]}"
+            )
             return action
         except Exception as e:
+            self.logger.error(
+                f"LLM error occurred: {e}, falling back to default action"
+            )
             self.last_reasoning = f"LLM error: {e}, using default"
             return available_actions[0]
 
@@ -180,14 +200,53 @@ Consider:
         Returns:
             LLM response text.
         """
-        if hasattr(self.llm_client, "chat"):
+        import os
+
+        if not self.llm_client:
+            raise ValueError("LLM client not configured")
+
+        # Use httpx client for OpenRouter API
+        if hasattr(self.llm_client, "post"):
+            model = os.getenv(
+                "OPENROUTER_PRIMARY_MODEL",
+                "mistralai/mistral-small-3.2-24b-instruct:free",
+            )
+
+            self.logger.debug(f"Calling OpenRouter API with model: {model}")
+
+            try:
+                response = self.llm_client.post(
+                    "chat/completions",  # No leading slash
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are an expert 18XX board game player. Respond with JSON containing 'action_index' (1-based) and 'reasoning'.",
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.7,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                self.logger.debug(f"OpenRouter API response: {data}")
+                return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                self.logger.error(f"OpenRouter API error: {e}")
+                if hasattr(e, "response"):
+                    self.logger.error(f"Response status: {e.response.status_code}")
+                    self.logger.error(f"Response body: {e.response.text}")
+                raise
+        elif hasattr(self.llm_client, "chat"):
             # OpenAI-style client
             response = self.llm_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert 18XX board game player.",
+                        "content": "You are an expert 18XX board game player. Respond with JSON containing 'action_index' (1-based) and 'reasoning'.",
                     },
                     {"role": "user", "content": prompt},
                 ],

@@ -46,7 +46,8 @@ Commands:
 /companies - View all companies
 /actions - See available actions
 /pass - Pass your turn
-/addai - Add an AI player
+/addai - Add a rule-based AI player
+/addai llm - Add an LLM-powered AI player (uses GPT)
 /help - Show this help
 
 Have fun building your railroad empire! 🚂💰"""
@@ -64,9 +65,14 @@ Have fun building your railroad empire! 🚂💰"""
         chat_id = update.effective_chat.id
         user = update.effective_user
 
+        logger.info(
+            f"User {user.username} ({user.id}) initiated /newgame in chat {chat_id}"
+        )
+
         # Check if game already exists
         existing = self.bot.get_game_for_chat(chat_id)
         if existing and existing.state.players:
+            logger.warning(f"Game already exists in chat {chat_id}, rejecting /newgame")
             await update.message.reply_text(
                 "⚠️ A game already exists in this chat. " "Use /endgame to end it first."
             )
@@ -74,6 +80,7 @@ Have fun building your railroad empire! 🚂💰"""
 
         # Create new game
         engine = self.bot.get_or_create_game_for_chat(chat_id)
+        logger.info(f"Created new game in chat {chat_id}")
 
         # Add the creator as first player
         player_id = str(user.id)
@@ -99,6 +106,10 @@ Have fun building your railroad empire! 🚂💰"""
         """Handle /joingame command."""
         chat_id = update.effective_chat.id
         user = update.effective_user
+
+        logger.info(
+            f"User {user.username} ({user.id}) attempting to join game in chat {chat_id}"
+        )
 
         engine = self.bot.get_game_for_chat(chat_id)
         if not engine:
@@ -132,6 +143,10 @@ Have fun building your railroad empire! 🚂💰"""
             telegram_id=user.id,
         )
 
+        logger.info(
+            f"Player {player_name} ({user.id}) successfully joined game in chat {chat_id}"
+        )
+
         player_list = ", ".join(p.name for p in engine.state.players.values())
 
         await update.message.reply_text(
@@ -145,6 +160,11 @@ Have fun building your railroad empire! 🚂💰"""
     ) -> None:
         """Handle /startgame command."""
         chat_id = update.effective_chat.id
+        user = update.effective_user
+
+        logger.info(
+            f"User {user.username} ({user.id}) initiated /startgame in chat {chat_id}"
+        )
         engine = self.bot.get_game_for_chat(chat_id)
 
         if not engine:
@@ -295,7 +315,10 @@ Have fun building your railroad empire! 🚂💰"""
         await self._prompt_current_player(update, context, engine)
 
     async def add_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /addai command."""
+        """Handle /addai command - adds rule-based AI.
+
+        Usage: /addai [llm] - add llm for LLM-based AI, otherwise adds rule-based AI
+        """
         chat_id = update.effective_chat.id
         engine = self.bot.get_game_for_chat(chat_id)
 
@@ -311,29 +334,52 @@ Have fun building your railroad empire! 🚂💰"""
             await update.message.reply_text("❌ Game is full.")
             return
 
+        # Check if LLM AI requested
+        use_llm = False
+        if context.args and len(context.args) > 0:
+            if context.args[0].lower() in ["llm", "gpt", "ai"]:
+                use_llm = True
+
         # Add AI player
-        ai_num = (
-            len(
-                [
-                    p
-                    for p in engine.state.players.values()
-                    if p.player_type == PlayerType.RULE_BASED_AI
-                ]
+        if use_llm:
+            ai_type = PlayerType.LLM
+            ai_count = (
+                len(
+                    [
+                        p
+                        for p in engine.state.players.values()
+                        if p.player_type == PlayerType.LLM
+                    ]
+                )
+                + 1
             )
-            + 1
-        )
+            ai_name = f"LLM Player {ai_count}"
+            emoji = "🧠"
+        else:
+            ai_type = PlayerType.RULE_BASED_AI
+            ai_count = (
+                len(
+                    [
+                        p
+                        for p in engine.state.players.values()
+                        if p.player_type == PlayerType.RULE_BASED_AI
+                    ]
+                )
+                + 1
+            )
+            ai_name = f"AI Player {ai_count}"
+            emoji = "🤖"
 
         ai_id = f"ai_{uuid.uuid4().hex[:8]}"
-        ai_name = f"AI Player {ai_num}"
 
         engine.add_player(
             player_id=ai_id,
             name=ai_name,
-            player_type=PlayerType.RULE_BASED_AI,
+            player_type=ai_type,
         )
 
         await update.message.reply_text(
-            f"🤖 {ai_name} has joined!\n\n" f"Players: {len(engine.state.players)}"
+            f"{emoji} {ai_name} has joined!\n\n" f"Players: {len(engine.state.players)}"
         )
 
     async def end_game(
@@ -379,7 +425,7 @@ Have fun building your railroad empire! 🚂💰"""
             return
 
         # Check if AI player
-        if current.player_type == PlayerType.RULE_BASED_AI:
+        if current.player_type in [PlayerType.RULE_BASED_AI, PlayerType.LLM]:
             await self._process_ai_turn(update, context, engine, current)
             return
 
@@ -406,9 +452,42 @@ Have fun building your railroad empire! 🚂💰"""
         ai_player: Any,
     ) -> None:
         """Process an AI player's turn."""
-        from teletycoon.ai.rule_based_ai import RuleBasedAI
+        logger.info(f"Processing AI turn for {ai_player.name}")
 
-        ai = RuleBasedAI(ai_player.id, engine.state)
+        # Choose appropriate AI implementation
+        if ai_player.player_type == PlayerType.LLM:
+            from teletycoon.ai.llm_player import LLMPlayer
+            import httpx
+            import os
+
+            # Create LLM client if API key is available
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            llm_client = None
+            if api_key:
+                llm_client = httpx.Client(
+                    base_url="https://openrouter.ai/api/v1",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "HTTP-Referer": "https://github.com/namuan/tele-tycoon",
+                        "X-Title": "TeleTycoon 1889",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=30.0,
+                )
+
+            ai = LLMPlayer(
+                ai_player.id,
+                engine.state,
+                personality="balanced",
+                llm_client=llm_client,
+            )
+            emoji = "🧠"
+        else:
+            from teletycoon.ai.rule_based_ai import RuleBasedAI
+
+            ai = RuleBasedAI(ai_player.id, engine.state)
+            emoji = "🤖"
+
         actions = engine.get_available_actions()
 
         if not actions:
@@ -424,7 +503,7 @@ Have fun building your railroad empire! 🚂💰"""
 
         # Report AI action
         renderer = StateRenderer(engine.state)
-        msg = f"🤖 {ai_player.name}: {renderer.render_action_result(result)}\n💭 {reasoning}"
+        msg = f"{emoji} {ai_player.name}: {renderer.render_action_result(result)}\n💭 {reasoning}"
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -520,7 +599,15 @@ class GameHandlers:
         """Execute a game action."""
         action_copy = dict(action)
         action_type = action_copy.pop("type", "unknown")
+        logger.info(f"Executing action {action_type} with params: {action_copy}")
         result = engine.execute_action(action_type, **action_copy)
+
+        if result.get("success"):
+            logger.info(f"Action {action_type} executed successfully")
+        else:
+            logger.warning(
+                f"Action {action_type} failed: {result.get('error', 'Unknown error')}"
+            )
 
         renderer = StateRenderer(engine.state)
         response = renderer.render_action_result(result)

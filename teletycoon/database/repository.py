@@ -1,6 +1,7 @@
 """Repository for game data persistence."""
 
 import json
+import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -35,6 +36,7 @@ class GameRepository:
             session: Database session.
         """
         self.session = session
+        self.logger = logging.getLogger(__name__)
 
     # Player operations
 
@@ -119,8 +121,11 @@ class GameRepository:
         Args:
             state: GameState object to save.
         """
+        self.logger.info(f"Saving game state for game {state.id}")
+
         game = self.get_game(state.id)
         if not game:
+            self.logger.debug(f"Game {state.id} not found, creating new game record")
             game = self.create_game(state.id)
 
         # Update game fields
@@ -153,6 +158,9 @@ class GameRepository:
             self._save_log_entry(game.id, log_entry)
 
         self.session.commit()
+        self.logger.info(
+            f"Successfully saved game state for game {state.id} with {len(state.players)} players and {len(state.companies)} companies"
+        )
 
     def _save_game_player(self, game_id: str, player: Player) -> None:
         """Save player game state."""

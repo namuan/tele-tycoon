@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from teletycoon.models.company import CompanyStatus
@@ -26,7 +27,9 @@ class GameEngine:
         Args:
             game_id: Unique identifier for this game.
         """
+        self.logger = logging.getLogger(__name__)
         self.state = GameState(id=game_id)
+        self.logger.info(f"GameEngine initialized for game {game_id}")
 
     def add_player(
         self,
@@ -53,6 +56,7 @@ class GameEngine:
             telegram_id=telegram_id,
         )
         self.state.add_player(player)
+        self.logger.info(f"Added player {name} (ID: {player_id}, Type: {player_type})")
         return player
 
     def start_game(self) -> None:
@@ -214,17 +218,40 @@ class GameEngine:
         Returns:
             Result dictionary with success status and details.
         """
+        player_name = (
+            self.state.current_player.name if self.state.current_player else "Unknown"
+        )
+        self.logger.info(
+            f"Executing action '{action_type}' for player {player_name} with params: {kwargs}"
+        )
+
+        result = None
         if self.state.current_phase == GamePhase.STOCK_ROUND:
-            return self._execute_stock_action(action_type, **kwargs)
+            result = self._execute_stock_action(action_type, **kwargs)
         elif self.state.current_phase == GamePhase.OPERATING_ROUND:
-            return self._execute_operating_action(action_type, **kwargs)
-        return {"success": False, "error": "Invalid game phase"}
+            result = self._execute_operating_action(action_type, **kwargs)
+        else:
+            result = {"success": False, "error": "Invalid game phase"}
+
+        if result.get("success"):
+            self.logger.info(
+                f"Action '{action_type}' completed successfully: {result.get('message', 'No message')}"
+            )
+        else:
+            self.logger.warning(
+                f"Action '{action_type}' failed: {result.get('error', 'Unknown error')}"
+            )
+
+        return result
 
     def _execute_stock_action(self, action_type: str, **kwargs: Any) -> dict[str, Any]:
         """Execute a stock round action."""
         player = self.state.current_player
         if not player:
+            self.logger.error("No current player found for stock action")
             return {"success": False, "error": "No current player"}
+
+        self.logger.debug(f"Processing stock action '{action_type}' for {player.name}")
 
         if action_type == "start_company":
             return self._start_company(

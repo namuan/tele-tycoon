@@ -1,5 +1,6 @@
 """Turn manager for TeleTycoon game flow control."""
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ class TurnManager:
             state: The game state to manage.
         """
         self.state = state
+        self.logger = logging.getLogger(__name__)
 
     def get_current_player_id(self) -> str | None:
         """Get the ID of the current player.
