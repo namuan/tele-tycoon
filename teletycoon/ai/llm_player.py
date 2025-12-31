@@ -209,14 +209,14 @@ Consider:
         if hasattr(self.llm_client, "post"):
             model = os.getenv(
                 "OPENROUTER_PRIMARY_MODEL",
-                "mistralai/mistral-small-3.2-24b-instruct:free",
+                "xiaomi/mimo-v2-flash:free",
             )
 
             self.logger.debug(f"Calling OpenRouter API with model: {model}")
 
             try:
                 response = self.llm_client.post(
-                    "chat/completions",  # No leading slash
+                    "/chat/completions",
                     json={
                         "model": model,
                         "messages": [
