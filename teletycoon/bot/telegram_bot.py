@@ -80,6 +80,7 @@ class TeleTycoonBot:
         self.app.add_handler(CommandHandler("pass", self.command_handlers.pass_turn))
         self.app.add_handler(CommandHandler("addai", self.command_handlers.add_ai))
         self.app.add_handler(CommandHandler("endgame", self.command_handlers.end_game))
+        self.app.add_handler(CommandHandler("resume", self.command_handlers.resume))
 
         # Register callback query handler for inline buttons
         self.app.add_handler(CallbackQueryHandler(self.game_handlers.handle_callback))
@@ -101,13 +102,38 @@ class TeleTycoonBot:
         self, update: object, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle errors in the bot."""
-        logger.error(f"Exception while handling update: {context.error}")
+        logger.error(
+            f"Exception while handling update: {context.error}", exc_info=context.error
+        )
 
         if isinstance(update, Update) and update.effective_chat:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ An error occurred. Please try again.",
-            )
+            chat_id = update.effective_chat.id
+            game_id = str(chat_id)
+
+            # Try to save current game state if it exists
+            if game_id in self.games:
+                try:
+                    self.games[game_id].save()
+                    logger.info(f"Saved game state after error for game {game_id}")
+                    message = (
+                        "❌ An error occurred, but your game has been saved.\n"
+                        "Use /status to continue playing."
+                    )
+                except Exception as save_error:
+                    logger.error(f"Failed to save game after error: {save_error}")
+                    message = (
+                        "❌ An error occurred. Please try /status to check game state."
+                    )
+            else:
+                message = "❌ An error occurred. Please try again."
+
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                )
+            except Exception as msg_error:
+                logger.error(f"Failed to send error message: {msg_error}")
 
     def run(self) -> None:
         """Run the bot (blocking)."""
@@ -152,7 +178,19 @@ class TeleTycoonBot:
         """
         # Simple mapping: use chat_id as game_id for now
         game_id = str(chat_id)
-        return self.games.get(game_id)
+
+        # Check in-memory cache first
+        if game_id in self.games:
+            return self.games[game_id]
+
+        # Try to load from database
+        logger.info(f"Game {game_id} not in memory, attempting to load from database")
+        engine = GameEngine.load_from_database(game_id)
+        if engine:
+            self.games[game_id] = engine
+            logger.info(f"Successfully loaded game {game_id} from database")
+
+        return engine
 
     def get_or_create_game_for_chat(self, chat_id: int) -> GameEngine:
         """Get or create a game for a chat.
@@ -164,6 +202,20 @@ class TeleTycoonBot:
             GameEngine instance.
         """
         game_id = str(chat_id)
-        if game_id not in self.games:
-            self.games[game_id] = GameEngine(game_id)
+
+        # Check in-memory cache
+        if game_id in self.games:
+            return self.games[game_id]
+
+        # Try to load from database
+        logger.info(f"Game {game_id} not in memory, checking database...")
+        engine = GameEngine.load_from_database(game_id)
+        if engine:
+            self.games[game_id] = engine
+            logger.info(f"Loaded existing game {game_id} from database")
+            return engine
+
+        # Create new game
+        logger.info(f"Creating new game {game_id}")
+        self.games[game_id] = GameEngine(game_id)
         return self.games[game_id]

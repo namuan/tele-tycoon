@@ -79,6 +79,37 @@ class GameEngine:
             except Exception as e:
                 self.logger.error(f"Failed to save game state: {e}")
 
+    @classmethod
+    def load_from_database(cls, game_id: str) -> GameEngine | None:
+        """Load a game from database.
+
+        Args:
+            game_id: Game ID to load.
+
+        Returns:
+            GameEngine instance with loaded state, or None if not found.
+        """
+        logger = logging.getLogger(__name__)
+        session = next(get_session())
+        repository = GameRepository(session)
+
+        state = repository.load_game_state(game_id)
+        if not state:
+            logger.warning(f"Game {game_id} not found in database")
+            return None
+
+        # Create engine without initializing new state
+        engine = cls.__new__(cls)
+        engine.logger = logger
+        engine.state = state
+        engine.enable_persistence = True
+        engine.repository = repository
+
+        logger.info(
+            f"Loaded game {game_id} from database with {len(state.players)} players"
+        )
+        return engine
+
     def start_game(self) -> None:
         """Start the game after all players have joined."""
         if len(self.state.players) < 2:

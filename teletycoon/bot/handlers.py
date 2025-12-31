@@ -41,6 +41,7 @@ Commands:
 /newgame - Create a new game
 /joingame - Join an existing game
 /startgame - Start the game (needs 2-6 players)
+/resume - Resume a saved game
 /status - View current game state
 /portfolio - View your holdings
 /companies - View all companies
@@ -48,6 +49,7 @@ Commands:
 /pass - Pass your turn
 /addai - Add a rule-based AI player
 /addai llm - Add an LLM-powered AI player (uses GPT)
+/endgame - End the current game
 /help - Show this help
 
 Have fun building your railroad empire! 🚂💰"""
@@ -393,6 +395,38 @@ Have fun building your railroad empire! 🚂💰"""
             await update.message.reply_text("🏁 Game ended.")
         else:
             await update.message.reply_text("No game to end.")
+
+    async def resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /resume command - reload game from database."""
+        chat_id = update.effective_chat.id
+        game_id = str(chat_id)
+
+        logger.info(f"User requested to resume game {game_id}")
+
+        # Remove from memory cache to force reload
+        if game_id in self.bot.games:
+            del self.bot.games[game_id]
+
+        # Try to load from database
+        engine = self.bot.get_game_for_chat(chat_id)
+
+        if not engine:
+            await update.message.reply_text(
+                "❌ No saved game found for this chat.\n"
+                "Use /newgame to create a new game."
+            )
+            return
+
+        # Show current state
+        from teletycoon.renderer.state_renderer import StateRenderer
+
+        renderer = StateRenderer(engine.state)
+        snapshot = renderer.render_full_snapshot()
+
+        await update.message.reply_text(f"✅ Game resumed!\n\n{snapshot}")
+
+        # Prompt current player
+        await self._prompt_current_player(update, context, engine)
 
     def _create_action_keyboard(
         self, actions: list[dict[str, Any]]
