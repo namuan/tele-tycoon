@@ -88,7 +88,11 @@ class StateRenderer:
         """Render company information."""
         lines = ["🚂 Companies:"]
 
-        active = [c for c in self.state.companies.values() if c.is_floated]
+        from teletycoon.models.company import CompanyStatus
+
+        active = [
+            c for c in self.state.companies.values() if c.status == CompanyStatus.ACTIVE
+        ]
 
         if not active:
             lines.append("  No companies started yet")
@@ -111,7 +115,11 @@ class StateRenderer:
 
     def _render_company_summary(self) -> str:
         """Render brief company summary."""
-        active = [c for c in self.state.companies.values() if c.is_floated]
+        from teletycoon.models.company import CompanyStatus
+
+        active = [
+            c for c in self.state.companies.values() if c.status == CompanyStatus.ACTIVE
+        ]
         if not active:
             return "🚂 No companies started"
 

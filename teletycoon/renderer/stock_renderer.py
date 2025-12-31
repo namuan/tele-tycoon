@@ -39,13 +39,17 @@ class StockRenderer:
         lines.append(header)
         lines.append("-" * len(header))
 
+        from teletycoon.models.company import CompanyStatus
+
         # Company rows
         for company_id, company in sorted(
             self.state.companies.items(),
-            key=lambda x: x[1].stock_price if x[1].is_floated else 0,
+            key=lambda x: x[1].stock_price
+            if x[1].status == CompanyStatus.ACTIVE
+            else 0,
             reverse=True,
         ):
-            if not company.is_floated:
+            if company.status != CompanyStatus.ACTIVE:
                 continue
 
             stock = self.state.stock_market.get_stock(company_id)
@@ -68,7 +72,11 @@ class StockRenderer:
             lines.append(row)
 
         # Unstarted companies
-        unstarted = [c for c in self.state.companies.values() if not c.is_floated]
+        unstarted = [
+            c
+            for c in self.state.companies.values()
+            if c.status == CompanyStatus.UNSTARTED
+        ]
         if unstarted:
             lines.append("")
             lines.append(
