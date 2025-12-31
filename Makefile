@@ -22,6 +22,14 @@ check: ## Run code quality tools.
 	@uv run pre-commit run -a
 	@mob next
 
+metrics: ## Check code quality: dead code, complexity, and maintainability (poe metrics equivalent)
+	@echo "🚀 Checking code quality metrics"
+	@uv run skylos . --quality
+	@echo "🚀 Checking cyclomatic complexity"
+	@uv run radon cc . -a -nb
+	@echo "🚀 Checking maintainability index"
+	@uv run radon mi . -nb
+
 check-tool: ## Manually run a single pre-commit hook
 	@echo "🚀 Running pre-commit hook: $(TOOL)"
 	@uv run pre-commit run $(TOOL) --all-files
