@@ -398,9 +398,9 @@ Have fun building your railroad empire! 🚂💰"""
         # Delete from database
         from teletycoon.database import GameRepository, get_session
 
-        session = next(get_session())
-        repo = GameRepository(session)
-        deleted = repo.delete_game(game_id)
+        with get_session() as session:
+            repo = GameRepository(session)
+            deleted = repo.delete_game(game_id)
 
         if deleted:
             await update.message.reply_text("🏁 Game ended.")

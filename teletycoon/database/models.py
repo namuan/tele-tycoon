@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -163,9 +163,10 @@ class GameLogModel(Base):
     """Database model for game event log."""
 
     __tablename__ = "game_log"
+    __table_args__ = (Index("ix_game_log_game_id_id", "game_id", "id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    game_id: Mapped[str] = mapped_column(String(64), ForeignKey("games.id"), index=True)
+    game_id: Mapped[str] = mapped_column(String(64), ForeignKey("games.id"))
     event_type: Mapped[str] = mapped_column(String(64))
     event_data_json: Mapped[str] = mapped_column(Text)
     stock_round: Mapped[int] = mapped_column(Integer)

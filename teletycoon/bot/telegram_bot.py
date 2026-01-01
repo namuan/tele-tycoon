@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 
 from telegram import Update
 from telegram.ext import (
@@ -217,10 +218,23 @@ class TeleTycoonBot:
 
         # Try to load from database
         logger.info(f"Game {game_id} not in memory, attempting to load from database")
+        t0 = time.perf_counter()
         engine = GameEngine.load_from_database(game_id)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         if engine:
             self.games[game_id] = engine
-            logger.info(f"Successfully loaded game {game_id} from database")
+            logger.info(
+                f"Successfully loaded game {game_id} from database in {elapsed_ms:.0f}ms"
+            )
+        else:
+            logger.info(
+                f"No saved game found for {game_id} (checked in {elapsed_ms:.0f}ms)"
+            )
+
+        if elapsed_ms > 1500:
+            logger.warning(
+                f"Slow database load for game {game_id}: {elapsed_ms:.0f}ms (in_memory_games={len(self.games)})"
+            )
 
         return engine
 
@@ -241,11 +255,18 @@ class TeleTycoonBot:
 
         # Try to load from database
         logger.info(f"Game {game_id} not in memory, checking database...")
+        t0 = time.perf_counter()
         engine = GameEngine.load_from_database(game_id)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         if engine:
             self.games[game_id] = engine
-            logger.info(f"Loaded existing game {game_id} from database")
+            logger.info(
+                f"Loaded existing game {game_id} from database in {elapsed_ms:.0f}ms"
+            )
             return engine
+        logger.info(
+            f"No saved game found for {game_id} (checked in {elapsed_ms:.0f}ms)"
+        )
 
         # Create new game
         logger.info(f"Creating new game {game_id}")

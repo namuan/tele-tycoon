@@ -1,6 +1,7 @@
 """Game state model for TeleTycoon 1889."""
 
 import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -92,6 +93,7 @@ class GameState:
     actions_this_turn: int = 0
     passed_players: set[str] = field(default_factory=set)
     game_log: list[dict[str, Any]] = field(default_factory=list)
+    persisted_game_log_count: int = 0
 
     def __post_init__(self) -> None:
         """Post-initialization setup."""
@@ -267,6 +269,17 @@ class GameState:
                 "or": self.operating_round_number,
             }
         )
+        max_entries_str = os.getenv("TELETYCOON_MAX_LOG_ENTRIES", "2000")
+        try:
+            max_entries = int(max_entries_str)
+        except ValueError:
+            max_entries = 2000
+        if max_entries > 0 and len(self.game_log) > max_entries:
+            drop_count = len(self.game_log) - max_entries
+            del self.game_log[:drop_count]
+            self.persisted_game_log_count = max(
+                0, self.persisted_game_log_count - drop_count
+            )
 
     def get_player_scores(self) -> dict[str, int]:
         """Calculate final scores for all players."""

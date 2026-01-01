@@ -2,8 +2,12 @@
 
 import json
 import logging
+import os
+import time
+from datetime import datetime
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from teletycoon.models.company import Company, CompanyStatus
@@ -154,10 +158,17 @@ class GameRepository:
         self._save_trains(game.id, state.train_depot)
 
         # Save game log
-        for log_entry in state.game_log:
-            self._save_log_entry(game.id, log_entry)
+        start_index = state.persisted_game_log_count
+        if start_index < 0:
+            start_index = 0
+        if start_index > len(state.game_log):
+            start_index = len(state.game_log)
+
+        self._save_log_entries(game.id, state.game_log[start_index:])
+        self._prune_persisted_game_log(game.id)
 
         self.session.commit()
+        state.persisted_game_log_count = len(state.game_log)
         self.logger.info(
             f"Successfully saved game state for game {state.id} with {len(state.players)} players and {len(state.companies)} companies"
         )
@@ -250,6 +261,51 @@ class GameRepository:
         )
         self.session.add(log)
 
+    def _save_log_entries(self, game_id: str, entries: list[dict[str, Any]]) -> None:
+        if not entries:
+            return
+
+        created_at = datetime.utcnow()
+        mappings = [
+            {
+                "game_id": game_id,
+                "event_type": entry.get("type", "unknown"),
+                "event_data_json": json.dumps(entry.get("data", {})),
+                "stock_round": entry.get("sr", 0),
+                "operating_round": entry.get("or", 0),
+                "created_at": created_at,
+            }
+            for entry in entries
+        ]
+        self.session.bulk_insert_mappings(GameLogModel, mappings)
+
+    def _prune_persisted_game_log(self, game_id: str) -> None:
+        max_entries_str = os.getenv("TELETYCOON_MAX_LOG_ENTRIES", "2000")
+        try:
+            max_entries = int(max_entries_str)
+        except ValueError:
+            max_entries = 2000
+
+        if max_entries <= 0:
+            return
+
+        self.session.execute(
+            text(
+                """
+                DELETE FROM game_log
+                WHERE game_id = :game_id
+                  AND id <= (
+                    SELECT id
+                    FROM game_log
+                    WHERE game_id = :game_id
+                    ORDER BY id DESC
+                    LIMIT 1 OFFSET :max_entries
+                  )
+                """
+            ),
+            {"game_id": game_id, "max_entries": max_entries},
+        )
+
     def load_game_state(self, game_id: str) -> GameState | None:
         """Load complete game state from database.
 
@@ -259,6 +315,7 @@ class GameRepository:
         Returns:
             GameState object or None if not found.
         """
+        t0 = time.perf_counter()
         game = self.get_game(game_id)
         if not game:
             return None
@@ -266,6 +323,7 @@ class GameRepository:
         state = GameState(id=game_id)
 
         # Load basic game state
+        t_basic_start = time.perf_counter()
         state.current_phase = GamePhase(game.current_phase)
         state.round_type = RoundType(game.round_type)
         state.stock_round_number = game.stock_round_number
@@ -274,8 +332,10 @@ class GameRepository:
         state.bank_cash = game.bank_cash
         state.player_order = game.player_order
         state.passed_players = game.passed_players
+        t_basic_ms = (time.perf_counter() - t_basic_start) * 1000
 
         # Load players
+        t_players_start = time.perf_counter()
         for game_player in game.game_players:
             player = Player(
                 id=game_player.player_id,
@@ -287,8 +347,10 @@ class GameRepository:
                 priority_deal=bool(game_player.priority_deal),
             )
             state.players[player.id] = player
+        t_players_ms = (time.perf_counter() - t_players_start) * 1000
 
         # Load companies
+        t_companies_start = time.perf_counter()
         for db_company in game.companies:
             company = Company(
                 id=db_company.company_id,
@@ -304,8 +366,10 @@ class GameRepository:
                 operated_this_round=bool(db_company.operated_this_round),
             )
             state.companies[company.id] = company
+        t_companies_ms = (time.perf_counter() - t_companies_start) * 1000
 
         # Load trains
+        t_trains_start = time.perf_counter()
         state.train_depot = TrainDepot()
         state.train_depot.current_phase = game.train_phase
 
@@ -319,14 +383,50 @@ class GameRepository:
                         if company:
                             company.trains.append(train)
                     break
+        t_trains_ms = (time.perf_counter() - t_trains_start) * 1000
 
         # Initialize stock market
+        t_stock_start = time.perf_counter()
         state.stock_market = StockMarket()
         for company_id in state.companies:
             state.stock_market.add_company(company_id)
+        t_stock_ms = (time.perf_counter() - t_stock_start) * 1000
 
         # Load game log
-        for log in game.game_log:
+        t_log_start = time.perf_counter()
+        max_entries_str = os.getenv("TELETYCOON_MAX_LOG_ENTRIES", "2000")
+        try:
+            max_entries = int(max_entries_str)
+        except ValueError:
+            max_entries = 2000
+
+        max_log_id = (
+            self.session.query(GameLogModel.id)
+            .filter_by(game_id=game_id)
+            .order_by(GameLogModel.id.desc())
+            .limit(1)
+            .scalar()
+        )
+        if max_entries <= 0:
+            logs: list[GameLogModel] = []
+        elif max_entries >= 50_000:
+            logs = (
+                self.session.query(GameLogModel)
+                .filter_by(game_id=game_id)
+                .order_by(GameLogModel.id.asc())
+                .all()
+            )
+        else:
+            logs = (
+                self.session.query(GameLogModel)
+                .filter_by(game_id=game_id)
+                .order_by(GameLogModel.id.desc())
+                .limit(max_entries)
+                .all()
+            )
+            logs.reverse()
+
+        for log in logs:
             state.game_log.append(
                 {
                     "type": log.event_type,
@@ -334,6 +434,30 @@ class GameRepository:
                     "sr": log.stock_round,
                     "or": log.operating_round,
                 }
+            )
+        t_log_ms = (time.perf_counter() - t_log_start) * 1000
+        state.persisted_game_log_count = len(state.game_log)
+
+        total_ms = (time.perf_counter() - t0) * 1000
+        trace = os.getenv("TELETYCOON_DB_TRACE") == "1"
+        if trace or total_ms > 750:
+            loaded_log_count = len(state.game_log)
+            max_log_id_display = int(max_log_id) if max_log_id is not None else 0
+            self.logger.info(
+                "DB load_state: game_id=%s total=%.0fms basic=%.0fms players=%.0fms companies=%.0fms trains=%.0fms stock=%.0fms log=%.0fms counts(players=%d companies=%d trains=%d log_loaded=%d log_max_id=%d)",
+                game_id,
+                total_ms,
+                t_basic_ms,
+                t_players_ms,
+                t_companies_ms,
+                t_trains_ms,
+                t_stock_ms,
+                t_log_ms,
+                len(state.players),
+                len(state.companies),
+                len(game.trains),
+                loaded_log_count,
+                max_log_id_display,
             )
 
         return state

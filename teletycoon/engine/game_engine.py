@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from teletycoon.database import GameRepository, get_session
@@ -32,11 +33,6 @@ class GameEngine:
         self.logger = logging.getLogger(__name__)
         self.state = GameState(id=game_id)
         self.enable_persistence = enable_persistence
-        self.repository = None
-
-        if enable_persistence:
-            session = next(get_session())
-            self.repository = GameRepository(session)
 
         self.logger.info(
             f"GameEngine initialized for game {game_id} (persistence: {enable_persistence})"
@@ -72,12 +68,15 @@ class GameEngine:
 
     def save(self) -> None:
         """Save the current game state to database."""
-        if self.enable_persistence and self.repository:
-            try:
-                self.repository.save_game_state(self.state)
-                self.logger.debug(f"Game state saved for game {self.state.id}")
-            except Exception as e:
-                self.logger.error(f"Failed to save game state: {e}")
+        if not self.enable_persistence:
+            return
+
+        try:
+            with get_session() as session:
+                GameRepository(session).save_game_state(self.state)
+            self.logger.debug(f"Game state saved for game {self.state.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to save game state: {e}")
 
     @classmethod
     def load_from_database(cls, game_id: str) -> GameEngine | None:
@@ -90,24 +89,35 @@ class GameEngine:
             GameEngine instance with loaded state, or None if not found.
         """
         logger = logging.getLogger(__name__)
-        session = next(get_session())
-        repository = GameRepository(session)
+        t0 = time.perf_counter()
 
-        state = repository.load_game_state(game_id)
+        logger.info(f"DB load: start game_id={game_id}")
+        with get_session() as session:
+            t_session_ms = (time.perf_counter() - t0) * 1000
+            repo = GameRepository(session)
+            t1 = time.perf_counter()
+            state = repo.load_game_state(game_id)
+            t_load_ms = (time.perf_counter() - t1) * 1000
+
         if not state:
-            logger.warning(f"Game {game_id} not found in database")
+            logger.warning(
+                f"DB load: game_id={game_id} not found (session={t_session_ms:.0f}ms, load={t_load_ms:.0f}ms)"
+            )
             return None
 
-        # Create engine without initializing new state
         engine = cls.__new__(cls)
         engine.logger = logger
         engine.state = state
         engine.enable_persistence = True
-        engine.repository = repository
 
+        total_ms = (time.perf_counter() - t0) * 1000
         logger.info(
-            f"Loaded game {game_id} from database with {len(state.players)} players"
+            f"DB load: done game_id={game_id} total={total_ms:.0f}ms (session={t_session_ms:.0f}ms, load={t_load_ms:.0f}ms) players={len(state.players)} companies={len(state.companies)} log={len(state.game_log)}"
         )
+        if total_ms > 1500:
+            logger.warning(
+                "DB load was slow; likely causes: large game_log, many lazy-loaded rows, or SQLite file lock/IO latency."
+            )
         return engine
 
     def start_game(self) -> None:
