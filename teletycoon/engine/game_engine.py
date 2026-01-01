@@ -239,14 +239,21 @@ class GameEngine:
 
         # Buy trains
         available_trains = self.state.train_depot.get_available_trains()
+        trains_by_type: dict[TrainType, list[Any]] = {}
         for train in available_trains:
-            if company.can_buy_train(train.cost):
+            trains_by_type.setdefault(train.train_type, []).append(train)
+
+        for train_type, trains in trains_by_type.items():
+            sample = trains[0]
+            if company.can_buy_train(sample.cost):
+                count = len(trains)
+                count_suffix = f" ({count} available)" if count > 1 else ""
                 actions.append(
                     {
                         "type": "buy_train",
-                        "train_type": train.train_type.value,
-                        "cost": train.cost,
-                        "description": f"Buy {train.name} for ¥{train.cost}",
+                        "train_type": train_type.value,
+                        "cost": sample.cost,
+                        "description": f"Buy {sample.name} for ¥{sample.cost}{count_suffix}",
                     }
                 )
 

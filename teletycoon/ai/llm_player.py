@@ -133,7 +133,7 @@ CURRENT GAME STATE:
 YOUR SITUATION:
 - Player: {player_name}
 - Cash: ¥{player_cash}
-- Round: {'Stock Round' if self.state.round_type.value == 'stock' else 'Operating Round'}
+- Round: {"Stock Round" if self.state.round_type.value == "stock" else "Operating Round"}
 
 AVAILABLE ACTIONS:
 {action_list}

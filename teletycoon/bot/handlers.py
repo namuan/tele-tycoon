@@ -76,7 +76,7 @@ Have fun building your railroad empire! 🚂💰"""
         if existing and existing.state.players:
             logger.warning(f"Game already exists in chat {chat_id}, rejecting /newgame")
             await update.message.reply_text(
-                "⚠️ A game already exists in this chat. " "Use /endgame to end it first."
+                "⚠️ A game already exists in this chat. Use /endgame to end it first."
             )
             return
 
@@ -381,7 +381,7 @@ Have fun building your railroad empire! 🚂💰"""
         )
 
         await update.message.reply_text(
-            f"{emoji} {ai_name} has joined!\n\n" f"Players: {len(engine.state.players)}"
+            f"{emoji} {ai_name} has joined!\n\nPlayers: {len(engine.state.players)}"
         )
 
     async def end_game(

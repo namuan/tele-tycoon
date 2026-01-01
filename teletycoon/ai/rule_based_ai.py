@@ -93,7 +93,7 @@ class RuleBasedAI(BaseAI):
             best_start = self._evaluate_company_starts(start_actions)
             if best_start:
                 self.last_reasoning = (
-                    f"Starting company to secure a presidency. " f"Cash: ¥{cash}"
+                    f"Starting company to secure a presidency. Cash: ¥{cash}"
                 )
                 return best_start
 

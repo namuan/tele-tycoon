@@ -225,7 +225,7 @@ class Board:
     def render_ascii(self) -> str:
         """Render the board as ASCII art."""
         lines = []
-        lines.append("   " + " ".join(f"{i+1:2}" for i in range(BOARD_COLS)))
+        lines.append("   " + " ".join(f"{i + 1:2}" for i in range(BOARD_COLS)))
 
         for row in range(BOARD_ROWS):
             row_char = chr(65 + row)
