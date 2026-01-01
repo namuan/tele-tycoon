@@ -39,6 +39,7 @@ class StateRenderer:
         sections = [
             self._render_header(),
             self._render_player_cash(),
+            self._render_player_position_map(),
             self._render_companies(),
             self.stock_renderer.render_stock_table(),
             self.board_renderer.render_compact(),
@@ -171,6 +172,55 @@ class StateRenderer:
             if company:
                 return f"🔔 {current.name} operating {company.name}"
             return f"🔔 {current.name}'s turn"
+
+    def _render_player_position_map(self) -> str:
+        players = []
+        for player_id in self.state.player_order:
+            player = self.state.players.get(player_id)
+            if player:
+                players.append(player)
+
+        if not players:
+            return "🗺 Map:\n  (no players yet)"
+
+        labels = self._unique_player_labels([p.name for p in players])
+        markers = [f"[{label}]" for label in labels]
+        map_line = " === o === ".join(markers)
+
+        return f"🗺 Map:\n{map_line}"
+
+    def _unique_player_labels(self, names: list[str]) -> list[str]:
+        used: set[str] = set()
+        labels: list[str] = []
+
+        for name in names:
+            base = self._name_to_label(name)
+            label = base
+            suffix = 2
+            while label in used:
+                label = f"{base}{suffix}"
+                suffix += 1
+            used.add(label)
+            labels.append(label)
+
+        return labels
+
+    def _name_to_label(self, name: str) -> str:
+        cleaned = "".join(ch for ch in name.strip() if ch.isalnum() or ch.isspace())
+        parts = [p for p in cleaned.split() if p]
+
+        if not parts:
+            return "P"
+
+        if len(parts) >= 2:
+            label = (parts[0][0] + parts[1][0]).upper()
+        else:
+            label = parts[0][:2].upper()
+
+        if len(label) == 1:
+            label = (label + "X").upper()
+
+        return label
 
     def render_action_prompt(self, actions: list[dict], player_name: str) -> str:
         """Render action options for a player.
