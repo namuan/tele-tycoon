@@ -117,6 +117,71 @@ class LLMPlayer(BaseAI):
         game_context = self._get_game_context()
         action_list = self._format_actions(actions)
 
+        stock_round_checklist = """STOCK ROUND CHECKLIST (1889 / Beginner-Safe)
+Goal: Improve your position without becoming responsible for a future disaster.
+
+Before You Buy Anything
+☐ Do I already control a company? → If yes, be very cautious starting another one. If no, starting one is usually correct.
+☐ If I buy this share, could I accidentally become President later? → If yes and I don’t want that company, don’t buy.
+☐ How many turns until the next train type appears? → If “soon,” assume everything will get more expensive.
+
+When Starting a Company
+☐ Can this company afford its first two trains without my money? → If no, don’t start it yet.
+☐ Does its home location point toward real revenue, not just open space? → If no, reconsider.
+☐ Am I emotionally ready to be blamed for this company? → If no, don’t start it.
+
+When Buying Shares
+☐ Does buying this share give me control, or just risk? → Control is good. Risk without control is bad.
+☐ Am I buying this because it’s “cheap,” or because it helps me win? → Cheap is a trap.
+☐ Will this purchase make someone else’s life worse right now? → If yes, that’s often correct.
+
+When Selling Shares
+☐ Will this force someone else to deal with a problem before they’re ready? → If yes, selling is strong.
+☐ Am I selling because I need cash, or because I’m panicking? → Panic selling usually loses games.
+☐ After I sell, am I safe from becoming President? → Double-check. Always.
+
+Before Passing
+☐ Could someone use my pass to hurt me? → If yes, consider acting first.
+☐ Do I understand why I’m passing? → “Because I don’t know what to do” is not a reason.
+"""
+
+        operating_round_checklist = """OPERATING ROUND CHECKLIST (1889 / Beginner-Safe)
+Goal: Keep your companies alive without chaining yourself to them.
+
+Track Laying
+☐ Does this tile increase current or near-future revenue? → Flexibility without income is fake.
+☐ Does this placement block someone or protect me from being blocked? → If yes, that’s a bonus.
+☐ Will I regret this tile in 3 rounds? → If yes, stop and rethink.
+🟥 Beginner rule: Always aim toward money, not options.
+
+Route Selection
+☐ Am I running the highest legal route right now? → “Saving it for later” is usually wrong.
+☐ Does this route support the next train, not just the current one? → Think one train ahead.
+
+Dividends Decision
+☐ Does this company need cash for a train soon? → If yes, withhold.
+☐ Is the stock price already high enough to sell later? → If yes, paying is optional.
+☐ Am I paying dividends just to feel good? → That’s a mistake.
+🟥 Beginner rule: Early game withhold, mid-game decide, late game pay.
+
+Train Buying (CRITICAL)
+☐ What is the next train this company will be forced to buy? → Not the one available now—the next one.
+☐ Can the company afford it without me? → If no, danger.
+☐ If trains rust this round, do I survive? → If you haven’t checked, you’re already late.
+☐ Would buying this train help my opponents more than me? → If yes, delay if legal.
+🟥 Beginner rule: Never buy a train just because you can.
+
+End of Company Turn
+☐ Is this company now safer, or more fragile? → Fragile companies attract attacks.
+☐ Would I be okay losing control of this company next Stock Round? → If no, prepare defenses.
+"""
+
+        checklist = (
+            stock_round_checklist
+            if self.state.round_type.value == "stock"
+            else operating_round_checklist
+        )
+
         personality_desc = {
             "aggressive": "You play aggressively, taking risks for higher rewards. You prefer to control companies and dominate the stock market.",
             "conservative": "You play conservatively, minimizing risk. You prefer steady gains and strong defensive positions.",
@@ -135,13 +200,23 @@ YOUR SITUATION:
 - Cash: ¥{player_cash}
 - Round: {"Stock Round" if self.state.round_type.value == "stock" else "Operating Round"}
 
+SURVIVAL CHECKLIST (use this as your decision rubric):
+{checklist}
+
 AVAILABLE ACTIONS:
 {action_list}
 
-Choose the best action and explain your reasoning. Respond in this JSON format:
+Choose the best action and explain your reasoning.
+
+Rules for choosing:
+- Use the checklist as a filter. If an item doesn’t apply to this implementation or to the available actions, ignore it.
+- Prioritize avoiding future disasters (unwanted presidency, forced train buys, insolvency) over small short-term gains.
+- If uncertain, prefer the safest non-losing move that keeps flexibility and liquidity.
+
+Respond with valid JSON only in this format:
 {{
     "action_index": <number from 1 to N>,
-    "reasoning": "<brief explanation of why this is the best move>"
+    "reasoning": "<1-3 sentences, citing 1-2 checklist items that drove the choice>"
 }}
 
 Consider:
@@ -150,6 +225,8 @@ Consider:
 3. Train rust schedule
 4. Stock price manipulation
 5. Future round implications
+
+One sentence to remember: “You don’t lose 18XX because of one bad move. You lose because you didn’t notice a bad future forming.”
 """
         return prompt
 
@@ -222,7 +299,7 @@ Consider:
                         "messages": [
                             {
                                 "role": "system",
-                                "content": "You are an expert 18XX board game player. Respond with JSON containing 'action_index' (1-based) and 'reasoning'.",
+                                "content": "You are an expert 18XX board game player who uses survival checklists to avoid future disasters (unwanted presidency, train rush/rust, insolvency). Return valid JSON only with keys 'action_index' (1-based) and 'reasoning'. Do not include markdown or extra text.",
                             },
                             {"role": "user", "content": prompt},
                         ],
@@ -246,7 +323,7 @@ Consider:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert 18XX board game player. Respond with JSON containing 'action_index' (1-based) and 'reasoning'.",
+                        "content": "You are an expert 18XX board game player who uses survival checklists to avoid future disasters (unwanted presidency, train rush/rust, insolvency). Return valid JSON only with keys 'action_index' (1-based) and 'reasoning'. Do not include markdown or extra text.",
                     },
                     {"role": "user", "content": prompt},
                 ],
