@@ -114,34 +114,58 @@ class TeleTycoonBot:
             f"Exception while handling update: {context.error}", exc_info=context.error
         )
 
-        if isinstance(update, Update) and update.effective_chat:
-            chat_id = update.effective_chat.id
-            game_id = str(chat_id)
+        if not isinstance(update, Update) or not update.effective_chat:
+            return
 
-            # Try to save current game state if it exists
-            if game_id in self.games:
-                try:
-                    self.games[game_id].save()
-                    logger.info(f"Saved game state after error for game {game_id}")
-                    message = (
-                        "❌ An error occurred, but your game has been saved.\n"
-                        "Use /status to continue playing."
-                    )
-                except Exception as save_error:
-                    logger.error(f"Failed to save game after error: {save_error}")
-                    message = (
-                        "❌ An error occurred. Please try /status to check game state."
-                    )
-            else:
-                message = "❌ An error occurred. Please try again."
+        chat_id = update.effective_chat.id
+        game_id = str(chat_id)
+        effective_user_id = (
+            str(update.effective_user.id) if update.effective_user else None
+        )
 
+        engine = self.games.get(game_id)
+
+        saved = False
+        if engine:
             try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
-                )
-            except Exception as msg_error:
-                logger.error(f"Failed to send error message: {msg_error}")
+                engine.save()
+                saved = True
+                logger.info(f"Saved game state after error for game {game_id}")
+            except Exception as save_error:
+                logger.error(f"Failed to save game after error: {save_error}")
+
+        if saved:
+            message = (
+                "❌ An error occurred, but your game has been saved.\n"
+                "Use /status to continue playing."
+            )
+        elif engine:
+            message = "❌ An error occurred. Please try /status to check game state."
+        else:
+            message = "❌ An error occurred. Please try again."
+
+        if saved:
+            current = engine.state.current_player if engine else None
+            try:
+                actions = engine.get_available_actions() if engine else []
+            except Exception:
+                actions = []
+
+            is_current_user_turn = (
+                current is not None
+                and effective_user_id is not None
+                and current.id == effective_user_id
+            )
+            if not actions or not is_current_user_turn:
+                return
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+            )
+        except Exception as msg_error:
+            logger.error(f"Failed to send error message: {msg_error}")
 
     def run(self) -> None:
         """Run the bot (blocking)."""
