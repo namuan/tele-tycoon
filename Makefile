@@ -44,7 +44,8 @@ deploy: clean ## Copies any changed file to the server
 		.env \
 		teletycoon \
 		scripts \
-		requirements.txt \
+		uv.lock \
+		pyproject.toml \
 		${PROJECTNAME}:./${PROJECTNAME}
 
 start: deploy ## Sets up a screen session on the server and start the app
